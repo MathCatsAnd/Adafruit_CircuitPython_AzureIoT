@@ -12,10 +12,14 @@ to IoT Central over MQTT
 
 * Author(s): Jim Bennett, Elena Horton
 """
+SSL_MODULE = True
 
 import json
-import ssl
 import time
+try:
+    import ssl
+except:
+    SSL_MODULE = False
 
 import adafruit_logging as logging
 from adafruit_logging import Logger
@@ -51,6 +55,9 @@ class DeviceRegistration:
         device_id: str,
         device_sas_key: str,
         logger: Logger = None,
+        device_certificate = None,
+        private_certificate_key = None,
+        use_builtin_ssl_module = True
     ):
         """Creates an instance of the device registration service
 
@@ -76,6 +83,10 @@ class DeviceRegistration:
 
         self._socket = socket
         self._iface = iface
+
+        self._device_certificate = device_certificate
+        self._private_certificate_key = private_certificate_key
+        self._use_builtin_ssl_module = use_builtin_ssl_module
 
     # pylint: disable=W0613
     # pylint: disable=C0103
@@ -196,15 +207,28 @@ class DeviceRegistration:
 
         MQTT.set_socket(self._socket, self._iface)
 
-        self._mqtt = MQTT.MQTT(
-            broker=constants.DPS_END_POINT,
-            username=username,
-            password=auth_string,
-            port=8883,
-            keep_alive=120,
-            client_id=self._device_id,
-            ssl_context=ssl.create_default_context(),
-        )
+        if self._use_builtin_ssl_module and SSL_MODULE:
+            self._mqtt = MQTT.MQTT(
+                broker=constants.DPS_END_POINT,
+                username=username,
+                password=auth_string,
+                port=8883,
+                keep_alive=120,
+                client_id=self._device_id,
+                ssl_context=ssl.create_default_context(),
+            )
+        else:
+            if self._device_certificate is not None:
+                self.iface.set_certificate(self._device_certificate)
+                self.iface.set_private_key(self._private_certificate_key)
+            self._mqtt = MQTT.MQTT(
+                broker=constants.DPS_END_POINT,
+                username=username,
+                password=auth_string,
+                port=8883,
+                keep_alive=120,
+                client_id=self._device_id
+            )
 
         self._mqtt.enable_logger(logging, self._logger.getEffectiveLevel())
 

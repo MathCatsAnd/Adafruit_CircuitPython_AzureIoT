@@ -12,10 +12,15 @@ An MQTT client for Azure IoT
 * Author(s): Jim Bennett, Elena Horton
 """
 
+SSL_MODULE = True
+
 import gc
 import json
-import ssl
 import time
+try:
+    import ssl
+except:
+    SSL_MODULE = False
 
 import adafruit_minimqtt.adafruit_minimqtt as MQTT
 import adafruit_logging as logging
@@ -132,7 +137,8 @@ class IoTMQTT:
             )
         )
 
-        self._mqtts = MQTT.MQTT(
+        if self._use_builtin_ssl_module and SSL_MODULE:
+            self._mqtt = MQTT.MQTT(
             broker=self._hostname,
             username=self._username,
             password=self._passwd,
@@ -140,7 +146,19 @@ class IoTMQTT:
             keep_alive=120,
             client_id=self._device_id,
             ssl_context=ssl.create_default_context(),
-        )
+            )
+        else:
+            if self._device_certificate is not None:
+                self.iface.set_certificate(self._device_certificate)
+                self.iface.set_private_key(self._private_certificate_key)
+            self._mqtt = MQTT.MQTT(
+                broker=self._hostname,
+                username=self._username,
+                password=self._passwd,
+                port=8883,
+                keep_alive=120,
+                client_id=self._device_id
+            )
 
         self._mqtts.enable_logger(logging, self._logger.getEffectiveLevel())
 
@@ -332,6 +350,9 @@ class IoTMQTT:
         device_sas_key: str,
         token_expires: int = 21600,
         logger: Logger = None,
+        device_certificate = None,
+        private_certificate_key = None,
+        use_builtin_ssl_module = True
     ):
         """Create the Azure IoT MQTT client
 
@@ -364,6 +385,10 @@ class IoTMQTT:
             self._logger = logging.getLogger("log")
             self._logger.addHandler(logging.StreamHandler())
         self._is_subscribed_to_twins = False
+
+        self._device_certificate = device_certificate
+        self._private_certificate_key = private_certificate_key
+        self._use_builtin_ssl_module = use_builtin_ssl_module
 
     def _subscribe_to_core_topics(self):
         device_bound_topic = "devices/{}/messages/devicebound/#".format(self._device_id)
